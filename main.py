@@ -78,13 +78,3 @@ def health():
 async def shutdown():
     logger.info("Shutting down StressMap API...")
     client.close()
-
-
-@app.get("/")
-def root():
-    return {"message": "StressMap API running!"}
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
