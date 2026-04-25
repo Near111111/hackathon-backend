@@ -14,7 +14,7 @@ if not MONGODB_URI:
 if not DB_NAME:
     raise ValueError("DB_NAME is not set in environment variables.")
 
-client = AsyncIOMotorClient(MONGODB_URI)
+client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=10, minPoolSize=2)
 db = client[DB_NAME]
 
 def get_db():

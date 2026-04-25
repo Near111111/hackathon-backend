@@ -1,7 +1,5 @@
 # services/ai_service.py
-
 from google import genai
-from google.genai import types
 import random
 import asyncio
 import logging
@@ -21,13 +19,16 @@ FALLBACK_QUOTES = [
     "May technical difficulties kami ngayon. Huwag kang mag-alala, babalik din ito!",
 ]
 
+
 class AIServiceError(Exception):
     """Base exception for AI service errors."""
     pass
 
+
 class QuotaExceededError(AIServiceError):
     """Raised when API quota is exhausted."""
     pass
+
 
 class ModelNotFoundError(AIServiceError):
     """Raised when the specified model is not available."""
@@ -37,33 +38,40 @@ class ModelNotFoundError(AIServiceError):
 def _is_quota_error(e: Exception) -> bool:
     return "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e)
 
+
 def _is_model_error(e: Exception) -> bool:
     return "404" in str(e) or "not found" in str(e).lower() or "invalid model" in str(e).lower()
+
 
 def _is_auth_error(e: Exception) -> bool:
     return "401" in str(e) or "403" in str(e) or "API_KEY" in str(e).upper()
 
 
+def _sync_call_gemini(model: str, prompt: str) -> str:
+    """Synchronous Gemini call — runs in a thread via asyncio.to_thread."""
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+    )
+    if not response or not response.text:
+        raise AIServiceError("Empty response received from Gemini API.")
+    return response.text.strip()
+
+
 async def _call_gemini_with_retry(prompt: str, model: str, max_retries: int = 3) -> str:
     """
     Calls Gemini API with exponential backoff retry on quota errors.
+    Uses asyncio.to_thread so the sync SDK call doesn't block the event loop.
     Raises specific exceptions for different failure modes.
     """
     last_exception = None
-
     for attempt in range(max_retries):
         try:
             logger.info(f"Calling Gemini model '{model}' (attempt {attempt + 1}/{max_retries})")
 
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt,
-            )
-
-            if not response or not response.text:
-                raise AIServiceError("Empty response received from Gemini API.")
-
-            return response.text.strip()
+            # ✅ Offload blocking SDK call to a thread — keeps FastAPI event loop free
+            text = await asyncio.to_thread(_sync_call_gemini, model, prompt)
+            return text
 
         except Exception as e:
             last_exception = e
@@ -102,11 +110,20 @@ async def generate_motivational_quote():
     db = get_db()
 
     try:
-        cursor = db["logs"].find().sort("created_at", -1)
-        logs = []
-        async for log in cursor:
-            log["_id"] = str(log["_id"])
-            logs.append(log)
+        # ✅ Fetch a random log efficiently — no need to load all logs into memory
+        count = await db["logs"].count_documents({})
+
+        if count == 0:
+            return {"quote": "Walang logs pa. Mag-log muna para makakuha ng motivational quote!"}
+
+        skip = random.randint(0, count - 1)
+        random_log = await db["logs"].find_one(skip=skip)
+
+        if not random_log:
+            return {"quote": "Walang logs pa. Mag-log muna para makakuha ng motivational quote!"}
+
+        random_log["_id"] = str(random_log["_id"])
+
     except Exception as e:
         logger.error(f"Database error while fetching logs: {e}")
         return {
@@ -114,15 +131,9 @@ async def generate_motivational_quote():
             "error": "database_error",
         }
 
-    if not logs:
-        return {"quote": "Walang logs pa. Mag-log muna para makakuha ng motivational quote!"}
-
-    random_log = random.choice(logs)
-
     prompt = f"""
 You are a Taglish wellness coach. Generate a SHORT motivational reminder (2-3 sentences) about general self-care and mental health.
-
-Use the user's data ONLY as context to know what topic to focus on — but DO NOT mention specific numbers or list their data back to them. 
+Use the user's data ONLY as context to know what topic to focus on — but DO NOT mention specific numbers or list their data back to them.
 Sound like a general reminder, not a personal report.
 
 USER CONTEXT (for topic guidance only):
@@ -153,7 +164,6 @@ STRICT RULES:
             "error": "quota_exceeded",
             "error_message": "API quota exhausted. Try again later or upgrade your Gemini plan.",
         }
-
     except ModelNotFoundError as e:
         return {
             "based_on_log": random_log,
@@ -161,7 +171,6 @@ STRICT RULES:
             "error": "model_not_found",
             "error_message": str(e),
         }
-
     except AIServiceError as e:
         logger.error(f"AI service error: {e}")
         return {
