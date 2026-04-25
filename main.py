@@ -28,15 +28,17 @@ async def startup():
     logger.info("Starting up StressMap API...")
     db = get_db()
 
-    # Create indexes for faster queries
-    await db["posts"].create_index([("created_at", -1)])
-    await db["posts"].create_index("user_id")
-    await db["posts"].create_index("hidden_by")
-    await db["comments"].create_index("post_id")
-    await db["comments"].create_index([("created_at", 1)])
-    await db["logs"].create_index([("created_at", -1)])
-
-    logger.info("Database indexes created successfully.")
+    try:
+        await db["posts"].create_index([("created_at", -1)])
+        await db["posts"].create_index("user_id")
+        await db["posts"].create_index("hidden_by")
+        await db["comments"].create_index("post_id")
+        await db["comments"].create_index([("created_at", 1)])
+        await db["logs"].create_index([("created_at", -1)])
+        logger.info("Database indexes created successfully.")
+    except Exception as e:
+        logger.warning(f"Could not create indexes: {e}")
+        # Don't crash the app if indexes fail — just log it
 
 
 @app.on_event("shutdown")

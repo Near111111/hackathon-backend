@@ -1,5 +1,4 @@
 # db/database.py
-
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
@@ -14,7 +13,13 @@ if not MONGODB_URI:
 if not DB_NAME:
     raise ValueError("DB_NAME is not set in environment variables.")
 
-client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=10, minPoolSize=2)
+client = AsyncIOMotorClient(
+    MONGODB_URI,
+    maxPoolSize=10,
+    minPoolSize=2,
+    tlsAllowInvalidCertificates=False,  # keep SSL strict
+)
+
 db = client[DB_NAME]
 
 def get_db():
