@@ -3,6 +3,8 @@ from google import genai
 import random
 import asyncio
 import logging
+
+from pymongo import results
 from db.database import get_db
 import os
 from dotenv import load_dotenv
@@ -117,7 +119,8 @@ async def generate_motivational_quote():
             return {"quote": "Walang logs pa. Mag-log muna para makakuha ng motivational quote!"}
 
         skip = random.randint(0, count - 1)
-        random_log = await db["logs"].find_one(skip=skip)
+        results = await db["logs"].find({}).skip(skip).limit(1).to_list(length=1)
+        random_log = results[0] if results else None
 
         if not random_log:
             return {"quote": "Walang logs pa. Mag-log muna para makakuha ng motivational quote!"}
