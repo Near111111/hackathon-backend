@@ -6,3 +6,4 @@ python-dotenv
 google-genai
 bcrypt
 pyjwt
+scikit-learn
