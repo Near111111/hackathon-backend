@@ -4,6 +4,7 @@ from db.database import get_db
 from bson import ObjectId
 from datetime import datetime
 import logging
+from services.moderation_service import moderate_content
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +18,19 @@ def _serialize(doc: dict) -> dict:
 
 async def create_post(user_id: str, content: str) -> dict:
     db = get_db()
+
+    # ML moderation check (sync, no await needed)
+    label = moderate_content(content)
+    if label == "harassment":
+        raise ValueError("Your post was flagged for harassment and cannot be published.")
+
     post = {
         "user_id": user_id,
         "content": content,
+        "moderation_label": label,
         "likes": [],
         "comment_count": 0,
+        "hidden_by": [],
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }

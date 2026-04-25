@@ -11,7 +11,10 @@ router = APIRouter(prefix="/posts", tags=["Posts"])
 
 @router.post("/")
 async def create_post(body: CreatePostRequest, user_id: str = Query(...)):
-    post = await post_service.create_post(user_id=user_id, content=body.content)
+    try:
+        post = await post_service.create_post(user_id=user_id, content=body.content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return {"success": True, "data": post}
 
 
